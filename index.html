@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanke Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="monitor-case">
+        <div class="screen-container" id="gameContainer" tabindex="0">
+            <div class="scanlines"></div>
+           
+            <div class="hud">
+                <div>HI-SCORE: <span id="highScoreVal">0</span></div>
+                <div>SCORE: <span id="scoreVal">0</span></div>
+            </div>
+
+            <canvas id="gameCanvas" width="600" height="400"></canvas>
+           
+            <div id="pause-indicator">PAUSED</div>
+
+            <div id="overlay">
+                <h1 id="mainTitle">SNAKE GAME</h1>
+                <p style="color: #ccc; margin-top: 5px; font-family: 'VT323'"><!-- CHARGES DETONATE AUTOMATICALLY -->DEVELOPED BY <a href="https://www.smartdeveloper.github.com">PRAKASH</a></p>
+                <button id="startBtn">START GAME</button>
+                <div class="controls-hint" style="margin-top: 20px; color: #aaa; font-family: 'VT323'">
+                    WASD or ARROWS to Move<br>PRESS [SPACE] TO START
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-controls">
+        <div></div><div class="m-btn" data-dir="UP">▲</div><div></div>
+        <div class="m-btn" data-dir="LEFT">◀</div><div class="m-btn" data-dir="DOWN">▼</div><div class="m-btn" data-dir="RIGHT">▶</div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
