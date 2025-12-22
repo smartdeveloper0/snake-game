@@ -1,4 +1,6 @@
-const canvas = document.getElementById('gameCanvas');
+const apiKey = ""; // Runtime provided
+       
+        const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('gameContainer');
         const scoreEl = document.getElementById('scoreVal');
@@ -7,6 +9,7 @@ const canvas = document.getElementById('gameCanvas');
         const startBtn = document.getElementById('startBtn');
         const titleEl = document.getElementById('mainTitle');
         const pauseEl = document.getElementById('pause-indicator');
+        const aiMessageEl = document.getElementById('ai-message');
 
         const GRID = 25;
         const COLS = Math.floor(canvas.width / GRID);
@@ -24,13 +27,40 @@ const canvas = document.getElementById('gameCanvas');
         let isRunning = false;
         let isPaused = false;
         let frameCount = 0;
-        let lastActionTime = 0; // Fix for rapid fire input
+        let lastActionTime = 0;
 
         highEl.innerText = highScore;
 
-        // --- Sound System (Enhanced) ---
+        // --- Sound System ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
        
+        function playPCM16(base64Data) {
+            if (!base64Data) return;
+            try {
+                const binaryString = window.atob(base64Data);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+               
+                const int16 = new Int16Array(bytes.buffer);
+                const float32 = new Float32Array(int16.length);
+                for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+
+                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+                audioBuffer.getChannelData(0).set(float32);
+
+                const source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+               
+                const gain = audioCtx.createGain();
+                gain.gain.value = 1.0;
+               
+                source.connect(gain);
+                gain.connect(audioCtx.destination);
+                source.start();
+            } catch (e) { console.error("Audio Decode Error", e); }
+        }
+
         function playTone(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const t = audioCtx.currentTime;
@@ -46,10 +76,17 @@ const canvas = document.getElementById('gameCanvas');
                 osc.frequency.exponentialRampToValueAtTime(1600, t + 0.1);
                 gain.gain.setValueAtTime(0.2, t);
                 gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-                osc.connect(gain);
-                gain.connect(masterGain);
-                osc.start(t);
-                osc.stop(t + 0.1);
+                osc.connect(gain); gain.connect(masterGain); osc.start(t); osc.stop(t + 0.1);
+            } else if (type === 'process') {
+                // Computing sound
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(2000, t);
+                osc.frequency.linearRampToValueAtTime(800, t + 0.1);
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                osc.connect(gain); gain.connect(masterGain); osc.start(t); osc.stop(t + 0.1);
             } else if (type === 'pop') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -58,10 +95,7 @@ const canvas = document.getElementById('gameCanvas');
                 osc.frequency.exponentialRampToValueAtTime(300, t + 0.15);
                 gain.gain.setValueAtTime(0.15, t);
                 gain.gain.linearRampToValueAtTime(0, t + 0.15);
-                osc.connect(gain);
-                gain.connect(masterGain);
-                osc.start(t);
-                osc.stop(t + 0.15);
+                osc.connect(gain); gain.connect(masterGain); osc.start(t); osc.stop(t + 0.15);
             } else if (type === 'start') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -75,11 +109,7 @@ const canvas = document.getElementById('gameCanvas');
                 gain.gain.setValueAtTime(0, t);
                 gain.gain.linearRampToValueAtTime(0.2, t + 0.1);
                 gain.gain.linearRampToValueAtTime(0, t + 0.5);
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(masterGain);
-                osc.start(t);
-                osc.stop(t + 0.5);
+                osc.connect(filter); filter.connect(gain); gain.connect(masterGain); osc.start(t); osc.stop(t + 0.5);
             } else if (type === 'gameover') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -90,63 +120,102 @@ const canvas = document.getElementById('gameCanvas');
                 lfo.frequency.value = 20;
                 const lfoGain = audioCtx.createGain();
                 lfoGain.gain.value = 50;
-                lfo.connect(lfoGain);
-                lfoGain.connect(osc.frequency);
-                lfo.start(t);
-                lfo.stop(t + 0.6);
-                gain.gain.setValueAtTime(0.3, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.6);
-                osc.connect(gain);
-                gain.connect(masterGain);
-                osc.start(t);
-                osc.stop(t + 0.6);
+                lfo.connect(lfoGain); lfoGain.connect(osc.frequency); lfo.start(t); lfo.stop(t + 0.6);
+                gain.gain.setValueAtTime(0.3, t); gain.gain.linearRampToValueAtTime(0, t + 0.6);
+                osc.connect(gain); gain.connect(masterGain); osc.start(t); osc.stop(t + 0.6);
             } else if (type === 'explode') {
                 const bufferSize = audioCtx.sampleRate * 1.0;
                 const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
                 const data = buffer.getChannelData(0);
                 for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-                const noise = audioCtx.createBufferSource();
-                noise.buffer = buffer;
-                const noiseFilter = audioCtx.createBiquadFilter();
-                noiseFilter.type = 'lowpass';
-                noiseFilter.frequency.setValueAtTime(1200, t);
-                noiseFilter.frequency.exponentialRampToValueAtTime(50, t + 0.8);
-                const noiseGain = audioCtx.createGain();
-                noiseGain.gain.setValueAtTime(1.5, t);
-                noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
-                noise.connect(noiseFilter);
-                noiseFilter.connect(noiseGain);
-                noiseGain.connect(masterGain);
-                noise.start(t);
-                const boom = audioCtx.createOscillator();
-                boom.type = 'sine';
-                boom.frequency.setValueAtTime(150, t);
-                boom.frequency.exponentialRampToValueAtTime(30, t + 0.6);
-                const boomGain = audioCtx.createGain();
-                boomGain.gain.setValueAtTime(1.5, t);
-                boomGain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
-                boom.connect(boomGain);
-                boomGain.connect(masterGain);
-                boom.start(t);
-                boom.stop(t + 0.6);
-                const crack = audioCtx.createOscillator();
-                crack.type = 'sawtooth';
-                crack.frequency.setValueAtTime(200, t);
-                crack.frequency.exponentialRampToValueAtTime(50, t + 0.2);
-                const crackGain = audioCtx.createGain();
-                crackGain.gain.setValueAtTime(0.8, t);
-                crackGain.gain.linearRampToValueAtTime(0, t + 0.15);
-                crack.connect(crackGain);
-                crackGain.connect(masterGain);
-                crack.start(t);
-                crack.stop(t + 0.2);
+                const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+                const noiseFilter = audioCtx.createBiquadFilter(); noiseFilter.type = 'lowpass'; noiseFilter.frequency.setValueAtTime(1200, t); noiseFilter.frequency.exponentialRampToValueAtTime(50, t + 0.8);
+                const noiseGain = audioCtx.createGain(); noiseGain.gain.setValueAtTime(1.5, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
+                noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(masterGain); noise.start(t);
+                const boom = audioCtx.createOscillator(); boom.type = 'sine'; boom.frequency.setValueAtTime(150, t); boom.frequency.exponentialRampToValueAtTime(30, t + 0.6);
+                const boomGain = audioCtx.createGain(); boomGain.gain.setValueAtTime(1.5, t); boomGain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+                boom.connect(boomGain); boomGain.connect(masterGain); boom.start(t); boom.stop(t + 0.6);
+                const crack = audioCtx.createOscillator(); crack.type = 'sawtooth'; crack.frequency.setValueAtTime(200, t); crack.frequency.exponentialRampToValueAtTime(50, t + 0.2);
+                const crackGain = audioCtx.createGain(); crackGain.gain.setValueAtTime(0.8, t); crackGain.gain.linearRampToValueAtTime(0, t + 0.15);
+                crack.connect(crackGain); crackGain.connect(masterGain); crack.start(t); crack.stop(t + 0.2);
             }
         }
+
+        // --- GEMINI AI SERVICE (OPTIMIZED) ---
+        const ViperAI = {
+            async analyzeDeath(score, reason) {
+                // Show box only when dead
+                aiMessageEl.style.display = 'block';
+                aiMessageEl.innerText = "CALCULATING FAILURE...";
+                aiMessageEl.classList.add('cursor');
+                playTone('process');
+
+                try {
+                    // Optimization: Shorter prompt, strict max tokens
+                    const prompt = `Player died in Snake. Reason: ${reason}. Roast them in max 5 words.`;
+                   
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { maxOutputTokens: 15, temperature: 0.9 }
+                        })
+                    });
+                   
+                    const data = await response.json();
+                    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "SYSTEM FAILURE.";
+                    text = text.replace(/^(AI|ViperOS):/i, "").trim().toUpperCase();
+                   
+                    // Show text immediately
+                    this.typeWriter(text);
+                    // Fetch audio immediately
+                    this.speak(text);
+                   
+                } catch (e) {
+                    console.error(e);
+                    aiMessageEl.innerText = "CONNECTION LOST.";
+                }
+            },
+
+            async speak(text) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: text }] }],
+                            generationConfig: {
+                                responseModalities: ["AUDIO"],
+                                speechConfig: {
+                                    voiceConfig: { prebuiltVoiceConfig: { voiceName: "Fenrir" } }
+                                }
+                            }
+                        })
+                    });
+                    const data = await response.json();
+                    const audioContent = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                    if (audioContent) playPCM16(audioContent);
+                } catch (e) { console.error("TTS Error", e); }
+            },
+
+            typeWriter(text) {
+                aiMessageEl.innerText = "";
+                let i = 0;
+                const typeInterval = setInterval(() => {
+                    aiMessageEl.innerText += text.charAt(i);
+                    i++;
+                    if (i >= text.length) {
+                        clearInterval(typeInterval);
+                        aiMessageEl.classList.remove('cursor');
+                    }
+                }, 20);
+            }
+        };
 
         // --- Game Logic ---
 
         function initGame() {
-            // Reset State
             snake = [{x: 5, y: 10}, {x: 5, y: 11}, {x: 5, y: 12}];
             bombs = [];
             velocity = {x: 0, y: -1};
@@ -157,23 +226,20 @@ const canvas = document.getElementById('gameCanvas');
             isRunning = true;
             isPaused = false;
            
-            // Clean UI
             overlay.style.display = 'none';
             pauseEl.style.display = 'none';
+           
+            // HIDE AI BOX ON START
+            aiMessageEl.style.display = 'none';
+            aiMessageEl.innerText = "";
+           
             spawnFood();
             playTone('start');
            
             container.focus();
-
-            // Set lastActionTime to now to prevent immediate pause toggle
             lastActionTime = Date.now();
-           
-            // Reset Loop Timer so we don't jump frames
             lastFrame = performance.now();
-           
-            // Force immediate draw to clear Game Over screen
             draw();
-           
             requestAnimationFrame(loop);
         }
 
@@ -197,8 +263,6 @@ const canvas = document.getElementById('gameCanvas');
             }
 
             frameCount++;
-
-            // Ensure lastFrame is set if it's the very first loop
             if (!lastFrame) lastFrame = timestamp;
 
             if (timestamp - lastFrame < speed) {
@@ -226,14 +290,18 @@ const canvas = document.getElementById('gameCanvas');
             }
 
             // 2. Collisions
-            if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || snake.some(p => p.x === head.x && p.y === head.y)) {
-                gameOver("GAME OVER");
+            if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+                gameOver("WALL COLLISION");
+                return;
+            }
+            if (snake.some(p => p.x === head.x && p.y === head.y)) {
+                gameOver("SELF-CANNIBALISM");
                 return;
             }
 
             if (bombs.some(b => b.x === head.x && b.y === head.y)) {
                 playTone('explode');
-                gameOver("EXPLODED BOMB");
+                gameOver("EXPLOSIVE DETONATION");
                 return;
             }
 
@@ -259,7 +327,7 @@ const canvas = document.getElementById('gameCanvas');
             drawRealisticSnake();
         }
 
-        // --- Render Functions (Same as before) ---
+        // --- Render Functions ---
         function drawCyberBomb(bomb) {
             const gx = bomb.x;
             const gy = bomb.y;
@@ -364,25 +432,20 @@ const canvas = document.getElementById('gameCanvas');
         function drawHead(x, y, r) {
             ctx.save();
             ctx.translate(x, y);
-
             let angle = 0;
             if (velocity.x === 1) angle = 0;
             if (velocity.x === -1) angle = Math.PI;
             if (velocity.y === 1) angle = Math.PI/2;
             if (velocity.y === -1) angle = -Math.PI/2;
-
             ctx.rotate(angle);
             ctx.beginPath(); ctx.ellipse(0, 0, r + 2, r, 0, 0, Math.PI*2); ctx.fill();
-
             const eyeX = r * 0.4; const eyeY = r * 0.5;
             ctx.fillStyle = '#fff';
             ctx.beginPath(); ctx.arc(eyeX, -eyeY, r*0.3, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(eyeX, eyeY, r*0.3, 0, Math.PI*2); ctx.fill();
-
             ctx.fillStyle = '#000';
             ctx.beginPath(); ctx.arc(eyeX + 1, -eyeY, r*0.15, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(eyeX + 1, eyeY, r*0.15, 0, Math.PI*2); ctx.fill();
-
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.beginPath(); ctx.arc(r, -2, 1, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(r, 2, 1, 0, Math.PI*2); ctx.fill();
@@ -427,7 +490,7 @@ const canvas = document.getElementById('gameCanvas');
         function gameOver(reason) {
             isRunning = false;
            
-            if (reason !== "DETONATION") {
+            if (reason !== "EXPLOSIVE DETONATION") {
                 playTone('gameover');
             }
 
@@ -436,7 +499,11 @@ const canvas = document.getElementById('gameCanvas');
                 localStorage.setItem('snakeMineHigh', highScore);
             }
             titleEl.innerText = reason || "GAME OVER";
-            startBtn.innerText = "RETRY";
+            startBtn.innerText = "PRESS SPACE TO RETRY";
+           
+            // --- VIPER OS INTEGRATION ---
+            ViperAI.analyzeDeath(score, reason);
+           
             overlay.style.display = 'flex';
         }
 
