@@ -97,6 +97,8 @@
             z-index: 60;
             text-align: center;
             backdrop-filter: blur(4px);
+            padding: 20px;
+            box-sizing: border-box;
         }
        
         #pause-indicator {
@@ -121,8 +123,33 @@
             letter-spacing: 2px;
         }
 
+        /* AI Message Styling - HIDDEN BY DEFAULT */
+        #ai-message {
+            display: none; /* Crucial fix: Hidden until death */
+            margin: 20px 0;
+            min-height: 2em;
+            color: var(--neon-red);
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            text-shadow: 0 0 8px rgba(255, 51, 51, 0.6);
+            max-width: 90%;
+            line-height: 1.2;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border: 1px solid var(--neon-red);
+            border-radius: 4px;
+        }
+       
+        .cursor::after {
+            content: '█';
+            animation: blink 0.8s infinite;
+            margin-left: 5px;
+        }
+       
+        @keyframes blink { 50% { opacity: 0; } }
+
         button {
-            margin-top: 25px;
+            margin-top: 15px;
             background: transparent;
             border: 2px solid var(--neon-green);
             color: var(--neon-green);
